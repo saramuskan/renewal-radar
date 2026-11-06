@@ -119,13 +119,16 @@ app.delete('/api/subscriptions/:id', async (req, res) => {
 // Claude MCP endpoint
 app.post('/mcp', async (req, res) => {
       const expectedToken = process.env.MCP_ACCESS_TOKEN;
-  const mcpTokenHeader = req.headers['x-mcp-token'];
+  const apiKeyHeader = req.headers['x-api-key'];
+const mcpTokenHeader = req.headers['x-mcp-token'];
 const authHeader = req.headers.authorization;
 
 const providedToken =
-  typeof mcpTokenHeader === 'string'
-    ? mcpTokenHeader
-    : authHeader;
+  typeof apiKeyHeader === 'string'
+    ? apiKeyHeader
+    : typeof mcpTokenHeader === 'string'
+      ? mcpTokenHeader
+      : authHeader;
 
   if (!expectedToken) {
     console.error('MCP_ACCESS_TOKEN is not configured.');
