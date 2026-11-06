@@ -119,16 +119,25 @@ app.delete('/api/subscriptions/:id', async (req, res) => {
 // Claude MCP endpoint
 app.post('/mcp', async (req, res) => {
       const expectedToken = process.env.MCP_ACCESS_TOKEN;
-  const authHeader = req.headers.authorization;
+  const mcpTokenHeader = req.headers['x-mcp-token'];
+const authHeader = req.headers.authorization;
+
+const providedToken =
+  typeof mcpTokenHeader === 'string'
+    ? mcpTokenHeader
+    : authHeader;
 
   if (!expectedToken) {
     console.error('MCP_ACCESS_TOKEN is not configured.');
     return res.status(500).json({ error: 'Server authentication is not configured.' });
   }
 
-  if (authHeader !== `Bearer ${expectedToken}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+ if (
+  providedToken !== `Bearer ${expectedToken}` &&
+  providedToken !== expectedToken
+) {
+  return res.status(401).json({ error: 'Unauthorized' });
+}
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined
   });
