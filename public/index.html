@@ -1,0 +1,187 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RenewalRadar | Subscription Manager</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5f7fb;color:#182230;font-family:Arial,sans-serif}
+header{background:#172554;color:white;padding:22px 7%;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:23px}
+header p{margin:5px 0 0;color:#cbd5e1;font-size:13px}
+main{max-width:1100px;margin:32px auto;padding:0 20px}
+h2{font-size:20px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:20px 0}
+.card,.panel{background:white;border:1px solid #e5eaf2;border-radius:12px;padding:20px}
+.stat-label{color:#64748b;font-size:13px}
+.stat-value{font-size:26px;font-weight:bold;margin-top:9px}
+.panel{margin-top:22px}
+form{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}
+input,select{width:100%;padding:11px;border:1px solid #d7deea;border-radius:7px;font-size:14px;background:white}
+label{font-size:12px;color:#475569;display:block;margin-bottom:6px}
+button{border:0;border-radius:7px;padding:11px 16px;background:#3157d5;color:white;cursor:pointer;font-weight:600}
+button:hover{opacity:.9}
+button.secondary{background:#e8edff;color:#2846a5}
+button.danger{background:#fff0f0;color:#bd3030}
+.form-actions{grid-column:1/-1}
+#message{font-size:13px;margin-top:10px}
+.subscription{border-top:1px solid #edf0f5;padding:17px 0;display:flex;justify-content:space-between;gap:15px;align-items:center}
+.subscription h3{margin:0 0 6px;font-size:16px}
+.muted{color:#64748b;font-size:13px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:11px;background:#e9f8ef;color:#187342;padding:5px 9px;border-radius:20px}
+.empty{color:#64748b;text-align:center;padding:25px}
+@media(max-width:650px){.stats{grid-template-columns:1fr}form{grid-template-columns:1fr}.subscription{align-items:flex-start;flex-direction:column}header{padding:20px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>◉ RenewalRadar</h1>
+    <p>Stay ahead of every subscription renewal.</p>
+  </div>
+  <span style="font-size:13px">Business workspace</span>
+</header>
+
+<main>
+  <h2>Subscription overview</h2>
+  <p class="muted">Track recurring costs, upcoming renewals and active subscriptions.</p>
+
+  <section class="stats">
+    <div class="card">
+      <div class="stat-label">Total subscriptions</div>
+      <div class="stat-value" id="total">0</div>
+    </div>
+    <div class="card">
+      <div class="stat-label">Monthly recurring cost</div>
+      <div class="stat-value" id="monthly">₹0</div>
+    </div>
+    <div class="card">
+      <div class="stat-label">Renewals in next 30 days</div>
+      <div class="stat-value" id="upcoming">0</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Add a subscription</h2>
+    <form id="addForm">
+      <div><label>Subscription name *</label><input name="name" placeholder="e.g. Design Software" required></div>
+      <div><label>Vendor *</label><input name="vendor" placeholder="e.g. Figma" required></div>
+      <div><label>Amount (₹) *</label><input name="amount" type="number" min="0" step="0.01" required></div>
+      <div><label>Billing cycle</label>
+        <select name="billing_cycle"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select>
+      </div>
+      <div><label>Next renewal date *</label><input name="renewal_date" type="date" required></div>
+      <div><label>Team</label><input name="team" placeholder="e.g. Marketing"></div>
+      <div><label>Notes</label><input name="notes" placeholder="Optional details"></div>
+      <div><label>Status</label><select name="status"><option value="active">Active</option><option value="cancelled">Cancelled</option></select></div>
+      <div class="form-actions"><button type="submit">+ Add subscription</button><div id="message"></div></div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Your subscriptions</h2>
+    <div id="list"><div class="empty">Loading subscriptions...</div></div>
+  </section>
+</main>
+
+<script>
+const API = '/api/subscriptions';
+const money = n => '₹' + Number(n).toLocaleString('en-IN',{maximumFractionDigits:2});
+const safe = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function loadSubscriptions(){
+  const list = document.getElementById('list');
+  try{
+    const response = await fetch(API);
+    if(!response.ok) throw new Error('Could not load subscriptions');
+    const items = await response.json();
+    document.getElementById('total').textContent = items.length;
+
+    const monthly = items.filter(x=>x.status==='active').reduce((sum,x)=>{
+      const divisor = x.billing_cycle==='yearly'?12:x.billing_cycle==='quarterly'?3:1;
+      return sum + Number(x.amount)/divisor;
+    },0);
+    document.getElementById('monthly').textContent = money(monthly);
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end = new Date(today); end.setDate(end.getDate()+30);
+    const upcoming = items.filter(x=>{
+      const d = new Date(x.renewal_date+'T00:00:00');
+      return x.status==='active' && d>=today && d<=end;
+    });
+    document.getElementById('upcoming').textContent = upcoming.length;
+
+    if(!items.length){
+      list.innerHTML='<div class="empty">No subscriptions yet. Add your first one above!</div>';
+      return;
+    }
+
+    list.innerHTML = items.map(x=>`
+      <div class="subscription">
+        <div>
+          <h3>${safe(x.name)} <span class="pill">${safe(x.status)}</span></h3>
+          <div class="muted">${safe(x.vendor)} · ${safe(x.team || 'General')}</div>
+          <div style="margin-top:7px">${money(x.amount)} / ${safe(x.billing_cycle)} · Renews ${safe(x.renewal_date)}</div>
+          ${x.notes?`<div class="muted" style="margin-top:5px">${safe(x.notes)}</div>`:''}
+        </div>
+        <div class="actions">
+          <button class="secondary" onclick="editSubscription('${x.id}')">Edit</button>
+          <button class="danger" onclick="deleteSubscription('${x.id}')">Delete</button>
+        </div>
+      </div>`).join('');
+  }catch(error){
+    list.innerHTML='<div class="empty">Could not load data. Check that the backend is running.</div>';
+  }
+}
+
+document.getElementById('addForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form).entries());
+  data.amount = Number(data.amount);
+  document.getElementById('message').textContent='Saving...';
+  try{
+    const response = await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const result = await response.json();
+    if(!response.ok) throw new Error(result.error || 'Could not save');
+    form.reset();
+    document.getElementById('message').textContent='Subscription added successfully!';
+    loadSubscriptions();
+  }catch(error){
+    document.getElementById('message').textContent=error.message;
+  }
+});
+
+async function editSubscription(id){
+  const name = prompt('Enter the subscription name:');
+  if(name===null || !name.trim()) return;
+  const vendor = prompt('Enter the vendor:');
+  if(vendor===null || !vendor.trim()) return;
+  const amount = prompt('Enter the amount in ₹:');
+  if(amount===null || amount.trim()==='' || !Number.isFinite(Number(amount)) || Number(amount)<0) return alert('Enter a valid amount.');
+  const renewal_date = prompt('Enter renewal date (YYYY-MM-DD):');
+  if(renewal_date===null || !/^\d{4}-\d{2}-\d{2}$/.test(renewal_date)) return alert('Enter the date as YYYY-MM-DD.');
+  const status = prompt('Enter status: active or cancelled','active');
+  if(status===null || !['active','cancelled'].includes(status)) return alert('Status must be active or cancelled.');
+  const response = await fetch(`${API}/${id}`,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:name.trim(),vendor:vendor.trim(),amount:Number(amount),renewal_date,status})
+  });
+  if(!response.ok) return alert('Could not update subscription.');
+  loadSubscriptions();
+}
+
+async function deleteSubscription(id){
+  if(!confirm('Delete this subscription?')) return;
+  const response = await fetch(`${API}/${id}`,{method:'DELETE'});
+  if(!response.ok) return alert('Could not delete subscription.');
+  loadSubscriptions();
+}
+
+loadSubscriptions();
+</script>
+</body>
+</html>
